@@ -38,22 +38,29 @@ pub unsafe extern "C" fn Java_top_magicpotato_Echarts_save(
     path: JString,
     data: JString,
 ) {
-    let data: String = env
-        .get_string(&data)
-        .expect("Couldn't get data string!")
-        .into();
-    let path: String = env
-        .get_string(&path)
-        .expect("Couldn't get path string!")
-        .into();
-    let mut renderer = ImageRenderer::new(width as u32, height as u32);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let data: String = env
+            .get_string(&data)
+            .expect("Couldn't get data string!")
+            .into();
+        let path: String = env
+            .get_string(&path)
+            .expect("Couldn't get path string!")
+            .into();
+        let mut renderer = ImageRenderer::new(width as u32, height as u32);
 
-    let path = Path::new(&path);
-    if path.extension().expect("无法获取文件扩展名") == "svg" {
-        unwarp_exception!(renderer.save_by_json(data, path), env, ());
-    } else {
-        let extension = unwarp_exception!(parse_extension_by_path(path), env, ());
-        unwarp_exception!(renderer.save_format_by_json(extension, data, path), env, ());
+        let path = Path::new(&path);
+        if path.extension().expect("无法获取文件扩展名") == "svg" {
+            unwarp_exception!(renderer.save_by_json(data, path), env, ());
+        } else {
+            let extension = unwarp_exception!(parse_extension_by_path(path), env, ());
+            unwarp_exception!(renderer.save_format_by_json(extension, data, path), env, ());
+        }
+    }));
+    if let Err(_) = result {
+        let _ = env.exception_clear();
+        let _ = env.throw_new("java/lang/RuntimeException", "Rust panic: native code panicked");
+        return;
     }
 }
 
@@ -67,27 +74,37 @@ pub unsafe extern "C" fn Java_top_magicpotato_Echarts_render<'local>(
     extension: JString<'local>,
     data: JString<'local>,
 ) -> JByteArray<'local> {
-    let data: String = env
-        .get_string(&data)
-        .expect("Couldn't get data string!")
-        .into();
-    let extension: String = env
-        .get_string(&extension)
-        .expect("Couldn't get path string!")
-        .into();
-    let mut renderer = ImageRenderer::new(width as u32, height as u32);
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        let data: String = env
+            .get_string(&data)
+            .expect("Couldn't get data string!")
+            .into();
+        let extension: String = env
+            .get_string(&extension)
+            .expect("Couldn't get extension string!")
+            .into();
+        let mut renderer = ImageRenderer::new(width as u32, height as u32);
 
-    if extension == "svg" {
-        let x = unwarp_exception!(renderer.render_by_json(data), env, JByteArray::default());
-        env.byte_array_from_slice(x.as_bytes()).unwrap()
-    } else {
-        let extension = unwarp_exception!(parse_extension(&extension), env, JByteArray::default());
-        let x = unwarp_exception!(
-            renderer.render_format_by_json(extension, data),
-            env,
+        if extension == "svg" {
+            let x = unwarp_exception!(renderer.render_by_json(data), env, JByteArray::default());
+            env.byte_array_from_slice(x.as_bytes()).unwrap()
+        } else {
+            let extension = unwarp_exception!(parse_extension(&extension), env, JByteArray::default());
+            let x = unwarp_exception!(
+                renderer.render_format_by_json(extension, data),
+                env,
+                JByteArray::default()
+            );
+            env.byte_array_from_slice(x.as_slice()).unwrap()
+        }
+    }));
+    match result {
+        Ok(arr) => arr,
+        Err(_) => {
+            let _ = env.exception_clear();
+            let _ = env.throw_new("java/lang/RuntimeException", "Rust panic: native code panicked");
             JByteArray::default()
-        );
-        env.byte_array_from_slice(x.as_slice()).unwrap()
+        }
     }
 }
 
